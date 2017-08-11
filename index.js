@@ -69,6 +69,14 @@ if (!ENDPOINT) {
     process.exit(1);
 }
 
+if(!argv.s) {
+    console.log(figlet.textSync('AWS ES Proxy!', {
+        font: 'Speed',
+        horizontalLayout: 'default',
+        verticalLayout: 'default'
+    }));
+}
+
 // Try to infer the region if it is not provided as an argument.
 var REGION = argv.r;
 if (!REGION) {
@@ -107,13 +115,7 @@ function getCredentials(req, res, next) {
     });
 }
 
-if(!argv.s) {
-    console.log(figlet.textSync('AWS ES Proxy!', {
-        font: 'Speed',
-        horizontalLayout: 'default',
-        verticalLayout: 'default'
-    }));
-}
+
 
 
 
@@ -131,8 +133,6 @@ if (argv.u && argv.a) {
 app.use(bodyParser.raw({limit: REQ_LIMIT, type: function() { return true; }}));
 app.use(getCredentials);
 app.use(function (req, res) {
-    console.log('hello request: %j', req);
-    
     var bufferStream;
     if (Buffer.isBuffer(req.body)) {
         var bufferStream = new stream.PassThrough();
@@ -164,7 +164,6 @@ proxy.on('proxyReq', function (proxyReq, req) {
 });
 
 proxy.on('proxyRes', function (proxyReq, req, res) {
-    console.log('hello proxy response: %j', res);
     if (req.url.match(/\.(css|js|img|font)/)) {
         res.setHeader('Cache-Control', 'public, max-age=86400');
     }
@@ -203,13 +202,6 @@ http.request(options, function(response) {
     }
   });
 }).end();
-
-if (!success) {
-
-}
-
-
-
 
 console.log('AWS ES cluster available at http://' + BIND_ADDRESS + ':' + PORT);
 console.log('Kibana available at http://' + BIND_ADDRESS + ':' + PORT + '/_plugin/kibana/');
