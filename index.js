@@ -75,6 +75,7 @@ if (!REGION) {
     var m = ENDPOINT.match(/\.([^.]+)\.es\.amazonaws\.com\.?$/);
     if (m) {
         REGION = m[1];
+        console.log("setting region to " + REGION);
     } else {
         console.error('region cannot be parsed from endpoint address, either the endpoint must end ' +
                       'in .<region>.es.amazonaws.com or --region should be provided as an argument');
@@ -105,6 +106,17 @@ function getCredentials(req, res, next) {
         else return next();
     });
 }
+
+if(!argv.s) {
+    console.log(figlet.textSync('AWS ES Proxy!', {
+        font: 'Speed',
+        horizontalLayout: 'default',
+        verticalLayout: 'default'
+    }));
+}
+
+
+
 var proxy = httpProxy.createProxyServer({
     target: TARGET,
     changeOrigin: true,
@@ -119,6 +131,8 @@ if (argv.u && argv.a) {
 app.use(bodyParser.raw({limit: REQ_LIMIT, type: function() { return true; }}));
 app.use(getCredentials);
 app.use(function (req, res) {
+    console.log('hello request: %j', req);
+    
     var bufferStream;
     if (Buffer.isBuffer(req.body)) {
         var bufferStream = new stream.PassThrough();
@@ -134,7 +148,7 @@ proxy.on('proxyReq', function (proxyReq, req) {
     request.path = proxyReq.path;
     request.region = REGION;
     if (Buffer.isBuffer(req.body)) request.body = req.body;
-    if (!request.headers) request.headers = {};
+    if (!request.headers) request.headers = {};    
     request.headers['presigned-expires'] = false;
     request.headers['Host'] = ENDPOINT;
 
@@ -144,24 +158,58 @@ proxy.on('proxyReq', function (proxyReq, req) {
     proxyReq.setHeader('Host', request.headers['Host']);
     proxyReq.setHeader('X-Amz-Date', request.headers['X-Amz-Date']);
     proxyReq.setHeader('Authorization', request.headers['Authorization']);
-    if (request.headers['x-amz-security-token']) proxyReq.setHeader('x-amz-security-token', request.headers['x-amz-security-token']);
+    if (request.headers['x-amz-security-token']) {
+        proxyReq.setHeader('x-amz-security-token', request.headers['x-amz-security-token']);
+    }
 });
 
 proxy.on('proxyRes', function (proxyReq, req, res) {
+    console.log('hello proxy response: %j', res);
     if (req.url.match(/\.(css|js|img|font)/)) {
         res.setHeader('Cache-Control', 'public, max-age=86400');
     }
 });
 
-http.createServer(app).listen(PORT, BIND_ADDRESS);
+var server = http.createServer(app);
+server.listen(PORT, BIND_ADDRESS);
 
-if(!argv.s) {
-    console.log(figlet.textSync('AWS ES Proxy!', {
-        font: 'Speed',
-        horizontalLayout: 'default',
-        verticalLayout: 'default'
-    }));
+var success = false;
+var options = {
+  host: 'localhost',
+  path: '/',
+  port: PORT,
+  method: 'GET'
+};
+http.request(options, function(response) {
+  var str = '';
+
+  //another chunk of data has been recieved, so append it to `str`
+  response.on('data', function (chunk) {
+    str += chunk;
+  });
+
+  //the whole response has been recieved, so we just print it out here
+  response.on('end', function () {
+    
+    if (response.statusCode == 200) {
+        console.log("successfully connected to ElasticSearch!");
+        success = true;
+    } else {
+        console.error(str);
+        console.error("Status Code: " + response.statusCode);
+        server.close();
+        console.error("PROXY KILLED BECAUSE OF FAILURE");
+        process.exit(1);
+    }
+  });
+}).end();
+
+if (!success) {
+
 }
+
+
+
 
 console.log('AWS ES cluster available at http://' + BIND_ADDRESS + ':' + PORT);
 console.log('Kibana available at http://' + BIND_ADDRESS + ':' + PORT + '/_plugin/kibana/');
